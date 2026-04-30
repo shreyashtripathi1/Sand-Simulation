@@ -1,6 +1,3 @@
-#include <fstream>
-#include <chrono>
-#include <iomanip>
 #include <iostream>
 #include <cuda_runtime.h>
 #include <GLFW/glfw3.h> // You will need to install and link GLFW
@@ -16,7 +13,7 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
         if (action == GLFW_PRESS) isMouseDown = true;
         else if (action == GLFW_RELEASE) isMouseDown = false;
     }
-    // Track right clicks
+    // NEW: Track right clicks
     if (button == GLFW_MOUSE_BUTTON_RIGHT) {
         if (action == GLFW_PRESS) isRightMouseDown = true;
         else if (action == GLFW_RELEASE) isRightMouseDown = false;
@@ -29,7 +26,7 @@ void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
     mouseY = ypos;
 }
 
-// Configuration
+// --- Configuration ---
 const int WIDTH = 800;  //This is test size ,Real size 800
 const int HEIGHT = 600;   //This is test size ,Real size 600
 const int NUM_PIXELS = WIDTH * HEIGHT;
@@ -227,116 +224,60 @@ int main() {
     glEnable(GL_TEXTURE_2D);
 
     // --- 3. Grid/Block Setup ---
-    dim3 threadsPerBlock(32, 8, 1);
+    dim3 threadsPerBlock(8, 8, 1);
     dim3 numBlocks((WIDTH + threadsPerBlock.x - 1) / threadsPerBlock.x, 
                    (HEIGHT + threadsPerBlock.y - 1) / threadsPerBlock.y, 1);
 
     int simStep = 0;
-    std::ofstream logFile("performance_log_32x8.csv");
-    logFile << "Frame,SimTime(ms),RenderTime(ms),MemcpyTime(ms),TotalFrame(ms),FPS\n";
-
-    // CUDA Events (reuse them every frame)
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
 
     // --- 4. Main Game Loop ---
     while (!glfwWindowShouldClose(window)) {
-    auto frameStart = std::chrono::high_resolution_clock::now();
+        glfwPollEvents(); 
 
-    glfwPollEvents(); 
-    bool oddFrame = (simStep % 2 == 1);
+        bool oddFrame = (simStep % 2 == 1);
 
-    float simTime = 0.0f;
-    float renderTime = 0.0f;
-    float memcpyTime = 0.0f;
+        // A. INPUT PHASE
+        if (isMouseDown) {
+            int brushSize = 20; 
+            AddSandKernel<<<numBlocks, threadsPerBlock>>>(d_gridInput, (int)mouseX, (int)mouseY, brushSize, WIDTH, HEIGHT, simStep);
+            cudaDeviceSynchronize();
+        }
 
-    // ---------------- INPUT PHASE ----------------
-    if (isMouseDown) {
-        int brushSize = 20;
-        AddSandKernel<<<numBlocks, threadsPerBlock>>>(
-            d_gridInput, (int)mouseX, (int)mouseY, brushSize, WIDTH, HEIGHT, simStep
-        );
+        // B. SIMULATION PHASE
+        cudaMemcpy(d_gridOutput, d_gridInput, NUM_PIXELS * sizeof(int), cudaMemcpyDeviceToDevice);
+        cudaMemset(d_claims, 0, NUM_PIXELS * sizeof(unsigned int));
+        
+        // NEW: We pass mouseX, mouseY, isRightMouseDown, and the brushSize (20) at the end!
+        SimulateParticlesKernel<<<numBlocks, threadsPerBlock>>>(d_gridInput, d_gridOutput, d_claims, WIDTH, HEIGHT, oddFrame, (int)mouseX, (int)mouseY, isRightMouseDown, 20);
+        
+        cudaDeviceSynchronize();
+
+        // C. RENDER PHASE
+        RenderToColorKernel<<<numBlocks, threadsPerBlock>>>(d_gridOutput, d_colorBuffer, WIDTH, HEIGHT);
+        cudaDeviceSynchronize();
+
+        cudaMemcpy(h_colorBuffer, d_colorBuffer, NUM_PIXELS * sizeof(uchar4), cudaMemcpyDeviceToHost);
+
+        // Update texture and draw full screen quad
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, h_colorBuffer);
+
+        glClear(GL_COLOR_BUFFER_BIT);
+        glBegin(GL_QUADS);
+            glTexCoord2f(0.0f, 0.0f); glVertex2f(-1.0f, -1.0f);
+            glTexCoord2f(1.0f, 0.0f); glVertex2f( 1.0f, -1.0f);
+            glTexCoord2f(1.0f, 1.0f); glVertex2f( 1.0f,  1.0f);
+            glTexCoord2f(0.0f, 1.0f); glVertex2f(-1.0f,  1.0f);
+        glEnd();
+
+        glfwSwapBuffers(window); 
+
+        // D. SWAP BUFFERS (Ping-Pong)
+        int* temp = d_gridInput;
+        d_gridInput = d_gridOutput;
+        d_gridOutput = temp;
+
+        simStep++;
     }
-
-    // ---------------- SIMULATION PHASE ----------------
-    cudaMemcpy(d_gridOutput, d_gridInput, NUM_PIXELS * sizeof(int), cudaMemcpyDeviceToDevice);
-    cudaMemset(d_claims, 0, NUM_PIXELS * sizeof(unsigned int));
-
-    cudaEventRecord(start);
-
-    SimulateParticlesKernel<<<numBlocks, threadsPerBlock>>>(
-        d_gridInput, d_gridOutput, d_claims,
-        WIDTH, HEIGHT, oddFrame,
-        (int)mouseX, (int)mouseY,
-        isRightMouseDown, 20
-    );
-
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
-    cudaEventElapsedTime(&simTime, start, stop);
-
-    // ---------------- RENDER PHASE ----------------
-    cudaEventRecord(start);
-
-    RenderToColorKernel<<<numBlocks, threadsPerBlock>>>(
-        d_gridOutput, d_colorBuffer, WIDTH, HEIGHT
-    );
-
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
-    cudaEventElapsedTime(&renderTime, start, stop);
-
-    // ---------------- MEMCPY TIMING ----------------
-    auto t1 = std::chrono::high_resolution_clock::now();
-
-    cudaMemcpy(h_colorBuffer, d_colorBuffer,
-               NUM_PIXELS * sizeof(uchar4),
-               cudaMemcpyDeviceToHost);
-
-    auto t2 = std::chrono::high_resolution_clock::now();
-
-    memcpyTime = std::chrono::duration<float, std::milli>(t2 - t1).count();
-
-    // ---------------- RENDER TO SCREEN ----------------
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT,
-                 0, GL_RGBA, GL_UNSIGNED_BYTE, h_colorBuffer);
-
-    glClear(GL_COLOR_BUFFER_BIT);
-    glBegin(GL_QUADS);
-        glTexCoord2f(0.0f, 0.0f); glVertex2f(-1.0f, -1.0f);
-        glTexCoord2f(1.0f, 0.0f); glVertex2f( 1.0f, -1.0f);
-        glTexCoord2f(1.0f, 1.0f); glVertex2f( 1.0f,  1.0f);
-        glTexCoord2f(0.0f, 1.0f); glVertex2f(-1.0f,  1.0f);
-    glEnd();
-
-    glfwSwapBuffers(window);
-
-    // ---------------- FRAME TIME ----------------
-    auto frameEnd = std::chrono::high_resolution_clock::now();
-    float totalFrameTime =
-        std::chrono::duration<float, std::milli>(frameEnd - frameStart).count();
-
-    float fps = 1000.0f / totalFrameTime;
-
-    // ---------------- LOGGING ----------------
-    if (simStep % 10 == 0) { // log every 10 frames
-        logFile << simStep << ","
-                << std::fixed << std::setprecision(4)
-                << simTime << ","
-                << renderTime << ","
-                << memcpyTime << ","
-                << totalFrameTime << ","
-                << fps << "\n";
-    }
-
-    // ---------------- SWAP BUFFERS ----------------
-    int* temp = d_gridInput;
-    d_gridInput = d_gridOutput;
-    d_gridOutput = temp;
-
-    simStep++;
-}
 
     //  5. Cleanup
     cudaFree(d_gridInput);
@@ -346,9 +287,6 @@ int main() {
     free(h_colorBuffer);
     glfwDestroyWindow(window);
     glfwTerminate();
-    logFile.close();
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
 
     return 0;
 }
