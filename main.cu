@@ -1,6 +1,6 @@
 #include <iostream>
 #include <cuda_runtime.h>
-#include <GLFW/glfw3.h> // You will need to install and link GLFW
+#include <GLFW/glfw3.h> 
 
 // Global state for mouse
 double mouseX = 0, mouseY = 0;
@@ -13,7 +13,7 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
         if (action == GLFW_PRESS) isMouseDown = true;
         else if (action == GLFW_RELEASE) isMouseDown = false;
     }
-    // NEW: Track right clicks
+    // Track right clicks
     if (button == GLFW_MOUSE_BUTTON_RIGHT) {
         if (action == GLFW_PRESS) isRightMouseDown = true;
         else if (action == GLFW_RELEASE) isRightMouseDown = false;
@@ -26,9 +26,9 @@ void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
     mouseY = ypos;
 }
 
-// --- Configuration ---
-const int WIDTH = 800;  //This is test size ,Real size 800
-const int HEIGHT = 600;   //This is test size ,Real size 600
+//  Configuration 
+const int WIDTH = 800;  
+const int HEIGHT = 600;  
 const int NUM_PIXELS = WIDTH * HEIGHT;
 
 // States
@@ -40,7 +40,6 @@ const int SAND = 1;
 
 
 // 1. The Atomic Traffic Cop
-// This replaces Unity's AtomicCheckUnclaimed function
 __device__ bool AtomicCheckUnclaimed(unsigned int* claims, int targetIdx) {
     // Attempt to change the claim from 0 to 1. 
     // If it returns 0, we were the first ones here.
@@ -49,12 +48,6 @@ __device__ bool AtomicCheckUnclaimed(unsigned int* claims, int targetIdx) {
 }
 
 // 2. The Compute Shader Kernel
-// This replaces Unity's HandleSimulation and CSMain
-// 2. The Compute Shader Kernel
-// 2. The Compute Shader Kernel (Now with Mouse Repulsion!)
-// Notice the 4 new arguments added to the end of this function
-// 2. The Compute Shader Kernel (Upgraded Bulldozer!)
-// 2. The Compute Shader Kernel (Eruption Bulldozer!)
 __global__ void SimulateParticlesKernel(int* gridInput, int* gridOutput, unsigned int* claims, int width, int height, bool oddFrame, int mouseX, int mouseY, bool isRightMouseDown, int brushRadius) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -66,7 +59,7 @@ __global__ void SimulateParticlesKernel(int* gridInput, int* gridOutput, unsigne
 
     if (particle == EMPTY) return; 
 
-    // --- THE ERUPTION BULLDOZER ---
+    // THE ERUPTION BULLDOZER
     if (isRightMouseDown) {
         int gridMouseY = height - 1 - mouseY;
         
@@ -85,7 +78,7 @@ __global__ void SimulateParticlesKernel(int* gridInput, int* gridOutput, unsigne
             // Add a slight upward bias so sand flies into the air
             ny += 0.2f; 
 
-            // Look up to 200 pixels away to find the surface!
+            // Look up to 200 pixels away to find the surface
             int maxBlastDistance = 200; 
 
             // Search OUTWAR starting from the particle, traveling through solid sand
@@ -96,7 +89,7 @@ __global__ void SimulateParticlesKernel(int* gridInput, int* gridOutput, unsigne
                 if (pushX >= 0 && pushX < width && pushY >= 0 && pushY < height) {
                     int pushIdx = pushY * width + pushX;
                     
-                    // The very first EMPTY spot of open air we break through to becomes our new home!
+                    // The very first EMPTY spot of open air we break through to becomes our new home
                     if (gridInput[pushIdx] == EMPTY && AtomicCheckUnclaimed(claims, pushIdx)) {
                         gridOutput[currentIdx] = EMPTY;   // Leave our buried tomb
                         gridOutput[pushIdx] = particle;   // Pop out on the surface
@@ -164,7 +157,7 @@ __global__ void AddSandKernel(int* grid, int mouseX, int mouseY, int brushRadius
     
     if (dx*dx + dy*dy < brushRadius*brushRadius) {
         
-        // NEW: Only spawn sand if this specific pixel is empty!
+        // Only spawn sand if this specific pixel is empty!
         if (grid[y * width + x] == EMPTY) {
             float waveSpeed = 0.05f;
             float t = simStep * waveSpeed;
@@ -182,7 +175,7 @@ __global__ void AddSandKernel(int* grid, int mouseX, int mouseY, int brushRadius
 // CPU HOST CODE
 
 int main() {
-    // --- 1. CUDA Memory Setup ---
+    // 1. CUDA Memory Setup 
     int *d_gridInput, *d_gridOutput;
     unsigned int *d_claims;
     uchar4 *d_colorBuffer;
@@ -198,7 +191,7 @@ int main() {
     cudaMemset(d_gridInput, 0, NUM_PIXELS * sizeof(int));
     cudaMemset(d_gridOutput, 0, NUM_PIXELS * sizeof(int));
 
-    // --- 2. OpenGL & GLFW Setup ---
+    // 2. OpenGL & GLFW Setup
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW" << std::endl;
         return -1;
@@ -223,14 +216,14 @@ int main() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glEnable(GL_TEXTURE_2D);
 
-    // --- 3. Grid/Block Setup ---
+    // 3. Grid/Block Setup
     dim3 threadsPerBlock(8, 8, 1);
     dim3 numBlocks((WIDTH + threadsPerBlock.x - 1) / threadsPerBlock.x, 
                    (HEIGHT + threadsPerBlock.y - 1) / threadsPerBlock.y, 1);
 
     int simStep = 0;
 
-    // --- 4. Main Game Loop ---
+    // 4. Main Game Loop
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents(); 
 
@@ -247,7 +240,7 @@ int main() {
         cudaMemcpy(d_gridOutput, d_gridInput, NUM_PIXELS * sizeof(int), cudaMemcpyDeviceToDevice);
         cudaMemset(d_claims, 0, NUM_PIXELS * sizeof(unsigned int));
         
-        // NEW: We pass mouseX, mouseY, isRightMouseDown, and the brushSize (20) at the end!
+        // We pass mouseX, mouseY, isRightMouseDown, and the brushSize (20) at the end
         SimulateParticlesKernel<<<numBlocks, threadsPerBlock>>>(d_gridInput, d_gridOutput, d_claims, WIDTH, HEIGHT, oddFrame, (int)mouseX, (int)mouseY, isRightMouseDown, 20);
         
         cudaDeviceSynchronize();
