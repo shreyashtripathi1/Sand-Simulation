@@ -27,8 +27,8 @@ void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
 }
 
 //  Configuration 
-const int WIDTH = 800;  
-const int HEIGHT = 600;  
+const int WIDTH = 1280;  
+const int HEIGHT = 720;  
 const int NUM_PIXELS = WIDTH * HEIGHT;
 
 // States
@@ -79,7 +79,7 @@ __global__ void SimulateParticlesKernel(int* gridInput, int* gridOutput, unsigne
             ny += 0.2f; 
 
             // Look up to 200 pixels away to find the surface
-            int maxBlastDistance = 200; 
+            int maxBlastDistance = 400; 
 
             // Search OUTWAR starting from the particle, traveling through solid sand
             for (int step = 1; step < maxBlastDistance; step++) {
@@ -159,7 +159,7 @@ __global__ void AddSandKernel(int* grid, int mouseX, int mouseY, int brushRadius
         
         // Only spawn sand if this specific pixel is empty!
         if (grid[y * width + x] == EMPTY) {
-            float waveSpeed = 0.05f;
+            float waveSpeed = 0.005f;
             float t = simStep * waveSpeed;
 
             unsigned char r = (unsigned char)((sinf(t) * 0.5f + 0.5f) * 255.0f);
