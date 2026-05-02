@@ -1,9 +1,6 @@
-#include <fstream>
-#include <chrono>
-#include <iomanip>
 #include <iostream>
 #include <cuda_runtime.h>
-#include <GLFW/glfw3.h> // You will need to install and link GLFW
+#include <GLFW/glfw3.h> 
 
 // Global state for mouse
 double mouseX = 0, mouseY = 0;
@@ -29,9 +26,9 @@ void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
     mouseY = ypos;
 }
 
-// Configuration
-const int WIDTH = 800;  //This is test size ,Real size 800
-const int HEIGHT = 600;   //This is test size ,Real size 600
+//  Configuration 
+const int WIDTH = 1280;  
+const int HEIGHT = 720;  
 const int NUM_PIXELS = WIDTH * HEIGHT;
 
 // States
@@ -43,7 +40,6 @@ const int SAND = 1;
 
 
 // 1. The Atomic Traffic Cop
-// This replaces Unity's AtomicCheckUnclaimed function
 __device__ bool AtomicCheckUnclaimed(unsigned int* claims, int targetIdx) {
     // Attempt to change the claim from 0 to 1. 
     // If it returns 0, we were the first ones here.
@@ -52,12 +48,6 @@ __device__ bool AtomicCheckUnclaimed(unsigned int* claims, int targetIdx) {
 }
 
 // 2. The Compute Shader Kernel
-// This replaces Unity's HandleSimulation and CSMain
-// 2. The Compute Shader Kernel
-// 2. The Compute Shader Kernel (Now with Mouse Repulsion!)
-// Notice the 4 new arguments added to the end of this function
-// 2. The Compute Shader Kernel (Upgraded Bulldozer!)
-// 2. The Compute Shader Kernel (Eruption Bulldozer!)
 __global__ void SimulateParticlesKernel(int* gridInput, int* gridOutput, unsigned int* claims, int width, int height, bool oddFrame, int mouseX, int mouseY, bool isRightMouseDown, int brushRadius) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -69,7 +59,7 @@ __global__ void SimulateParticlesKernel(int* gridInput, int* gridOutput, unsigne
 
     if (particle == EMPTY) return; 
 
-    // --- THE ERUPTION BULLDOZER ---
+    // THE ERUPTION BULLDOZER
     if (isRightMouseDown) {
         int gridMouseY = height - 1 - mouseY;
         
@@ -88,8 +78,8 @@ __global__ void SimulateParticlesKernel(int* gridInput, int* gridOutput, unsigne
             // Add a slight upward bias so sand flies into the air
             ny += 0.2f; 
 
-            // Look up to 200 pixels away to find the surface!
-            int maxBlastDistance = 200; 
+            // Look up to 200 pixels away to find the surface
+            int maxBlastDistance = 400; 
 
             // Search OUTWAR starting from the particle, traveling through solid sand
             for (int step = 1; step < maxBlastDistance; step++) {
@@ -99,7 +89,7 @@ __global__ void SimulateParticlesKernel(int* gridInput, int* gridOutput, unsigne
                 if (pushX >= 0 && pushX < width && pushY >= 0 && pushY < height) {
                     int pushIdx = pushY * width + pushX;
                     
-                    // The very first EMPTY spot of open air we break through to becomes our new home!
+                    // The very first EMPTY spot of open air we break through to becomes our new home
                     if (gridInput[pushIdx] == EMPTY && AtomicCheckUnclaimed(claims, pushIdx)) {
                         gridOutput[currentIdx] = EMPTY;   // Leave our buried tomb
                         gridOutput[pushIdx] = particle;   // Pop out on the surface
@@ -167,9 +157,9 @@ __global__ void AddSandKernel(int* grid, int mouseX, int mouseY, int brushRadius
     
     if (dx*dx + dy*dy < brushRadius*brushRadius) {
         
-        // NEW: Only spawn sand if this specific pixel is empty!
+        // Only spawn sand if this specific pixel is empty!
         if (grid[y * width + x] == EMPTY) {
-            float waveSpeed = 0.05f;
+            float waveSpeed = 0.005f;
             float t = simStep * waveSpeed;
 
             unsigned char r = (unsigned char)((sinf(t) * 0.5f + 0.5f) * 255.0f);
@@ -185,7 +175,7 @@ __global__ void AddSandKernel(int* grid, int mouseX, int mouseY, int brushRadius
 // CPU HOST CODE
 
 int main() {
-    // --- 1. CUDA Memory Setup ---
+    // 1. CUDA Memory Setup 
     int *d_gridInput, *d_gridOutput;
     unsigned int *d_claims;
     uchar4 *d_colorBuffer;
@@ -201,7 +191,7 @@ int main() {
     cudaMemset(d_gridInput, 0, NUM_PIXELS * sizeof(int));
     cudaMemset(d_gridOutput, 0, NUM_PIXELS * sizeof(int));
 
-    // --- 2. OpenGL & GLFW Setup ---
+    // 2. OpenGL & GLFW Setup
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW" << std::endl;
         return -1;
@@ -226,117 +216,61 @@ int main() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glEnable(GL_TEXTURE_2D);
 
-    // --- 3. Grid/Block Setup ---
-    dim3 threadsPerBlock(32, 8, 1);
+    // 3. Grid/Block Setup
+    dim3 threadsPerBlock(8, 8, 1);
     dim3 numBlocks((WIDTH + threadsPerBlock.x - 1) / threadsPerBlock.x, 
                    (HEIGHT + threadsPerBlock.y - 1) / threadsPerBlock.y, 1);
 
     int simStep = 0;
-    std::ofstream logFile("performance_log_32x8.csv");
-    logFile << "Frame,SimTime(ms),RenderTime(ms),MemcpyTime(ms),TotalFrame(ms),FPS\n";
 
-    // CUDA Events (reuse them every frame)
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-
-    // --- 4. Main Game Loop ---
+    // 4. Main Game Loop
     while (!glfwWindowShouldClose(window)) {
-    auto frameStart = std::chrono::high_resolution_clock::now();
+        glfwPollEvents(); 
 
-    glfwPollEvents(); 
-    bool oddFrame = (simStep % 2 == 1);
+        bool oddFrame = (simStep % 2 == 1);
 
-    float simTime = 0.0f;
-    float renderTime = 0.0f;
-    float memcpyTime = 0.0f;
+        // A. INPUT PHASE
+        if (isMouseDown) {
+            int brushSize = 20; 
+            AddSandKernel<<<numBlocks, threadsPerBlock>>>(d_gridInput, (int)mouseX, (int)mouseY, brushSize, WIDTH, HEIGHT, simStep);
+            cudaDeviceSynchronize();
+        }
 
-    // ---------------- INPUT PHASE ----------------
-    if (isMouseDown) {
-        int brushSize = 20;
-        AddSandKernel<<<numBlocks, threadsPerBlock>>>(
-            d_gridInput, (int)mouseX, (int)mouseY, brushSize, WIDTH, HEIGHT, simStep
-        );
+        // B. SIMULATION PHASE
+        cudaMemcpy(d_gridOutput, d_gridInput, NUM_PIXELS * sizeof(int), cudaMemcpyDeviceToDevice);
+        cudaMemset(d_claims, 0, NUM_PIXELS * sizeof(unsigned int));
+        
+        // We pass mouseX, mouseY, isRightMouseDown, and the brushSize (20) at the end
+        SimulateParticlesKernel<<<numBlocks, threadsPerBlock>>>(d_gridInput, d_gridOutput, d_claims, WIDTH, HEIGHT, oddFrame, (int)mouseX, (int)mouseY, isRightMouseDown, 20);
+        
+        cudaDeviceSynchronize();
+
+        // C. RENDER PHASE
+        RenderToColorKernel<<<numBlocks, threadsPerBlock>>>(d_gridOutput, d_colorBuffer, WIDTH, HEIGHT);
+        cudaDeviceSynchronize();
+
+        cudaMemcpy(h_colorBuffer, d_colorBuffer, NUM_PIXELS * sizeof(uchar4), cudaMemcpyDeviceToHost);
+
+        // Update texture and draw full screen quad
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, h_colorBuffer);
+
+        glClear(GL_COLOR_BUFFER_BIT);
+        glBegin(GL_QUADS);
+            glTexCoord2f(0.0f, 0.0f); glVertex2f(-1.0f, -1.0f);
+            glTexCoord2f(1.0f, 0.0f); glVertex2f( 1.0f, -1.0f);
+            glTexCoord2f(1.0f, 1.0f); glVertex2f( 1.0f,  1.0f);
+            glTexCoord2f(0.0f, 1.0f); glVertex2f(-1.0f,  1.0f);
+        glEnd();
+
+        glfwSwapBuffers(window); 
+
+        // D. SWAP BUFFERS (Ping-Pong)
+        int* temp = d_gridInput;
+        d_gridInput = d_gridOutput;
+        d_gridOutput = temp;
+
+        simStep++;
     }
-
-    // ---------------- SIMULATION PHASE ----------------
-    cudaMemcpy(d_gridOutput, d_gridInput, NUM_PIXELS * sizeof(int), cudaMemcpyDeviceToDevice);
-    cudaMemset(d_claims, 0, NUM_PIXELS * sizeof(unsigned int));
-
-    cudaEventRecord(start);
-
-    SimulateParticlesKernel<<<numBlocks, threadsPerBlock>>>(
-        d_gridInput, d_gridOutput, d_claims,
-        WIDTH, HEIGHT, oddFrame,
-        (int)mouseX, (int)mouseY,
-        isRightMouseDown, 20
-    );
-
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
-    cudaEventElapsedTime(&simTime, start, stop);
-
-    // ---------------- RENDER PHASE ----------------
-    cudaEventRecord(start);
-
-    RenderToColorKernel<<<numBlocks, threadsPerBlock>>>(
-        d_gridOutput, d_colorBuffer, WIDTH, HEIGHT
-    );
-
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
-    cudaEventElapsedTime(&renderTime, start, stop);
-
-    // ---------------- MEMCPY TIMING ----------------
-    auto t1 = std::chrono::high_resolution_clock::now();
-
-    cudaMemcpy(h_colorBuffer, d_colorBuffer,
-               NUM_PIXELS * sizeof(uchar4),
-               cudaMemcpyDeviceToHost);
-
-    auto t2 = std::chrono::high_resolution_clock::now();
-
-    memcpyTime = std::chrono::duration<float, std::milli>(t2 - t1).count();
-
-    // ---------------- RENDER TO SCREEN ----------------
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT,
-                 0, GL_RGBA, GL_UNSIGNED_BYTE, h_colorBuffer);
-
-    glClear(GL_COLOR_BUFFER_BIT);
-    glBegin(GL_QUADS);
-        glTexCoord2f(0.0f, 0.0f); glVertex2f(-1.0f, -1.0f);
-        glTexCoord2f(1.0f, 0.0f); glVertex2f( 1.0f, -1.0f);
-        glTexCoord2f(1.0f, 1.0f); glVertex2f( 1.0f,  1.0f);
-        glTexCoord2f(0.0f, 1.0f); glVertex2f(-1.0f,  1.0f);
-    glEnd();
-
-    glfwSwapBuffers(window);
-
-    // ---------------- FRAME TIME ----------------
-    auto frameEnd = std::chrono::high_resolution_clock::now();
-    float totalFrameTime =
-        std::chrono::duration<float, std::milli>(frameEnd - frameStart).count();
-
-    float fps = 1000.0f / totalFrameTime;
-
-    // ---------------- LOGGING ----------------
-    if (simStep % 10 == 0) { // log every 10 frames
-        logFile << simStep << ","
-                << std::fixed << std::setprecision(4)
-                << simTime << ","
-                << renderTime << ","
-                << memcpyTime << ","
-                << totalFrameTime << ","
-                << fps << "\n";
-    }
-
-    // ---------------- SWAP BUFFERS ----------------
-    int* temp = d_gridInput;
-    d_gridInput = d_gridOutput;
-    d_gridOutput = temp;
-
-    simStep++;
-}
 
     //  5. Cleanup
     cudaFree(d_gridInput);
@@ -346,9 +280,6 @@ int main() {
     free(h_colorBuffer);
     glfwDestroyWindow(window);
     glfwTerminate();
-    logFile.close();
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
 
     return 0;
 }
