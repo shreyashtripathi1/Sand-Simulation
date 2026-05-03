@@ -6,7 +6,10 @@ A real-time falling sand simulation powered by **CUDA** and **OpenGL**, implemen
 > Thapar Institute of Engineering and Technology, Patiala — May 2025
 
 ---
+## Showcase
+[sand-simulation-demo.webm](https://github.com/user-attachments/assets/ad24490b-6b5d-4096-b7b6-8bae3b29be4b)
 
+---
 ## Features
 
 - **GPU-parallel simulation** — 480,000 cells updated simultaneously via CUDA kernels
