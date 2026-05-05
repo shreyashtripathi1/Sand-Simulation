@@ -12,7 +12,7 @@ A real-time falling sand simulation powered by **CUDA** and **OpenGL**, implemen
 ---
 ## Features
 
-- **GPU-parallel simulation** — 480,000 cells updated simultaneously via CUDA kernels
+- **GPU-parallel simulation** — 480,000 cells (Scalable) updated simultaneously via CUDA kernels
 - **Cellular automata physics** — gravity-driven sand movement with stable angle-of-repose
 - **Race-condition-free updates** — atomic conflict resolution using `atomicCAS`
 - **Interactive controls**
