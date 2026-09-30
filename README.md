@@ -10,6 +10,18 @@ Real-time falling-sand simulation on the GPU with **CUDA** and **OpenGL**. The m
 
 ---
 
+## Demo
+
+### 3D version
+
+<!-- TODO: drag-and-drop the 3D demo video here on GitHub (edit README in the browser) -->
+
+### 2D version
+
+<!-- TODO: drag-and-drop the 2D demo video here on GitHub (edit README in the browser) -->
+
+---
+
 ## 3D version
 
 ### Features
