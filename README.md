@@ -1,3 +1,5 @@
+
+
 # CUDA-Accelerated Falling Sand: 3D, 2D and CPU versions
 
 Real-time falling-sand simulation on the GPU with **CUDA** and **OpenGL**. The main version is a **3D sand cube**: millions of grains fall inside a transparent glass cube that you rotate with the mouse, and a keyboard-controlled dropper pours sand anywhere inside it. The original **2D** version and a **CPU** port of the 3D simulation (for a GPU-vs-CPU comparison) are kept alongside it.
@@ -14,11 +16,11 @@ Real-time falling-sand simulation on the GPU with **CUDA** and **OpenGL**. The m
 
 ### 3D version
 
-<!-- TODO: drag-and-drop the 3D demo video here on GitHub (edit README in the browser) -->
+[<!-- TODO: drag-and-drop the 3D demo video here on GitHub (edit README in the browser) -->](https://github.com/user-attachments/assets/733367f9-38a0-4364-a5e9-4f4793374e89)
 
 ### 2D version
 
-<!-- TODO: drag-and-drop the 2D demo video here on GitHub (edit README in the browser) -->
+[<!-- TODO: drag-and-drop the 2D demo video here on GitHub (edit README in the browser) -->](https://github.com/user-attachments/assets/eb102ffc-8bcd-447b-adf9-150cc2415cc8)
 
 ---
 
